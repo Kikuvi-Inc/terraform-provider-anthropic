@@ -139,11 +139,6 @@ func (r *SkillVersionResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	// Mirror skill_resource.go: derive the bundle root from filePaths' shared
-	// parent directory (order-independent — see DeriveBundleRoot doc) and use
-	// the directory's base name as the API-required top-level directory name.
-	// Passing bundleRoot to MultipartUpload preserves any nested subdirectory
-	// structure (e.g. `references/foo.md`) instead of flattening to basenames.
 	bundleRoot, dirName, err := provretry.DeriveBundleRoot(filePaths)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid skill bundle", err.Error())

@@ -38,12 +38,6 @@ func TestDeriveBundleRoot_MultipleFilesFlat(t *testing.T) {
 	}
 }
 
-// TestDeriveBundleRoot_IndependentOfOrder is the regression test for the
-// ordering bug: when `fileset()` happens to return a nested file before
-// SKILL.md (e.g. because the subdirectory name sorts lexicographically
-// before "SKILL.md"), the previous derivation
-// `filepath.Dir(filePaths[0])` picked the subdirectory as the bundle
-// root and broke every other file.
 func TestDeriveBundleRoot_IndependentOfOrder(t *testing.T) {
 	bundle := "bundle"
 	nested := filepath.Join(bundle, "Assets", "icon.png")

@@ -146,12 +146,6 @@ func (r *SkillResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	// The API requires every file to live inside a single named top-level
-	// directory (e.g. "myskill/SKILL.md") and that name must match the
-	// `name` field in the bundle's SKILL.md frontmatter. DeriveBundleRoot
-	// returns the longest shared parent of filePaths, which is independent
-	// of input ordering — important because `fileset()` returns lexically
-	// sorted paths and a nested file may sort before SKILL.md.
 	bundleRoot, dirName, err := provretry.DeriveBundleRoot(filePaths)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid skill bundle", err.Error())

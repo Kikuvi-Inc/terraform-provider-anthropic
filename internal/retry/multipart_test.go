@@ -238,11 +238,6 @@ func TestMultipartUpload_FileNamingUseDirName(t *testing.T) {
 	}
 }
 
-// TestMultipartUpload_PreservesNestedSubdirectories is the regression test for
-// the bug where files inside subdirectories of the bundle root (e.g.
-// `references/template.md`) were uploaded with their basename only, breaking
-// SKILL.md cross-references that resolved to `references/template.md` at
-// runtime.
 func TestMultipartUpload_PreservesNestedSubdirectories(t *testing.T) {
 	dir := t.TempDir()
 	skillPath := writeFile(t, dir, "SKILL.md", "skill")
@@ -277,14 +272,9 @@ func TestMultipartUpload_PreservesNestedSubdirectories(t *testing.T) {
 	}
 }
 
-// TestMultipartUpload_RejectsFileOutsideBundleRoot ensures we fail loudly
-// rather than silently flattening to a basename when a caller passes a file
-// that does not live under the declared bundle root.
 func TestMultipartUpload_RejectsFileOutsideBundleRoot(t *testing.T) {
 	outerDir := t.TempDir()
 	innerDir := filepath.Join(outerDir, "bundle")
-	// writeFile creates parent directories as needed, so innerDir is created
-	// implicitly by the writeFile call below.
 	outsidePath := writeFile(t, outerDir, "outside.md", "x")
 	insidePath := writeFile(t, innerDir, "SKILL.md", "s")
 
@@ -341,9 +331,6 @@ func TestMultipartUpload_MultipleFiles(t *testing.T) {
 	}
 }
 
-// TestMultipartUpload_RejectsBundleRootItselfAsFile guards the `rel == "."`
-// branch of openFiles: a caller that passed bundleRoot itself as a "file"
-// would otherwise produce a nonsensical multipart name like "myskill/." .
 func TestMultipartUpload_RejectsBundleRootItselfAsFile(t *testing.T) {
 	dir := t.TempDir()
 

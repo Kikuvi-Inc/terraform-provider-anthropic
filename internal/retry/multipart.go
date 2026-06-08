@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -47,13 +48,19 @@ var backoff = func(attempt int) time.Duration {
 // MultipartUpload opens filePaths fresh on each attempt and calls fn with the
 // resulting readers, retrying up to 3 times on 5xx API errors with backoff.
 //
-// dirName is prepended to each file's base name in the multipart body (the
-// Anthropic API requires all files to live inside a named top-level directory,
-// and that name must match the `name` field in SKILL.md).
+// Each file's multipart name is `dirName + "/" + <relPath>`, where relPath is
+// the file's path relative to bundleRoot, using forward slashes regardless of
+// the host OS. This preserves nested subdirectory structure inside the bundle
+// (e.g. `references/foo.md`) so the Managed Agent runtime can resolve the
+// same relative paths the bundle author authored against. If a file lives at
+// the top of bundleRoot, relPath is its base name, equivalent to the previous
+// flat behaviour. If a file lies outside bundleRoot (which should not happen
+// for a valid bundle), the call returns an error instead of silently
+// falling back to the base name.
 //
 // File-open errors and non-5xx API errors are returned immediately without
 // retrying.
-func MultipartUpload[T any](ctx context.Context, filePaths []string, dirName string, fn func([]io.Reader) (T, error)) (T, error) {
+func MultipartUpload[T any](ctx context.Context, filePaths []string, bundleRoot, dirName string, fn func([]io.Reader) (T, error)) (T, error) {
 	const maxAttempts = 3
 	var zero T
 	for attempt := 0; attempt < maxAttempts; attempt++ {
@@ -65,7 +72,7 @@ func MultipartUpload[T any](ctx context.Context, filePaths []string, dirName str
 			}
 		}
 
-		files, openedFiles, err := openFiles(filePaths, dirName)
+		files, openedFiles, err := openFiles(filePaths, bundleRoot, dirName)
 		if err != nil {
 			return zero, err
 		}
@@ -84,19 +91,45 @@ func MultipartUpload[T any](ctx context.Context, filePaths []string, dirName str
 	return zero, nil // unreachable
 }
 
-func openFiles(filePaths []string, dirName string) ([]io.Reader, []*os.File, error) {
+func openFiles(filePaths []string, bundleRoot, dirName string) ([]io.Reader, []*os.File, error) {
 	files := make([]io.Reader, 0, len(filePaths))
 	opened := make([]*os.File, 0, len(filePaths))
 	for _, p := range filePaths {
+		rel, err := filepath.Rel(bundleRoot, p)
+		if err != nil {
+			closeAll(opened)
+			return nil, nil, fmt.Errorf("unable to compute path of %q relative to bundle root %q: %w", p, bundleRoot, err)
+		}
+		// `..` means the file is outside bundleRoot; the API requires every
+		// file to live inside the top-level directory, so refuse rather than
+		// silently flatten to a basename.
+		if rel == ".." || rel == "." || filepath.IsAbs(rel) || hasParentSegment(rel) {
+			closeAll(opened)
+			return nil, nil, fmt.Errorf("file %q is not inside bundle root %q (relative path: %q)", p, bundleRoot, rel)
+		}
 		f, err := os.Open(p)
 		if err != nil {
 			closeAll(opened)
 			return nil, nil, fmt.Errorf("unable to open file %q: %w", p, err)
 		}
 		opened = append(opened, f)
-		files = append(files, NewNamedReader(f, dirName+"/"+filepath.Base(p)))
+		// The API uses forward slashes regardless of host OS; normalise here
+		// so Windows-built provider binaries do not emit backslash names.
+		uploadName := dirName + "/" + filepath.ToSlash(rel)
+		files = append(files, NewNamedReader(f, uploadName))
 	}
 	return files, opened, nil
+}
+
+// hasParentSegment reports whether rel contains a `..` path segment, which
+// would mean the file escapes bundleRoot via a relative traversal.
+func hasParentSegment(rel string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(rel), "/") {
+		if seg == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func closeAll(files []*os.File) {

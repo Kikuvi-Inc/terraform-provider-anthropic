@@ -137,9 +137,16 @@ func (r *SkillVersionResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	dirName := filepath.Base(filepath.Dir(filePaths[0]))
+	// Mirror skill_resource.go: derive the bundle root from the first file's
+	// containing directory and use the directory's base name as the
+	// API-required top-level directory name. Passing bundleRoot to
+	// MultipartUpload preserves any nested subdirectory structure (e.g.
+	// `references/foo.md`) instead of flattening to basenames, which would
+	// otherwise break SKILL.md references that point into subdirectories.
+	bundleRoot := filepath.Dir(filePaths[0])
+	dirName := filepath.Base(bundleRoot)
 
-	skillVersion, err := provretry.MultipartUpload(ctx, filePaths, dirName, func(files []io.Reader) (*anthropic.BetaSkillVersionNewResponse, error) {
+	skillVersion, err := provretry.MultipartUpload(ctx, filePaths, bundleRoot, dirName, func(files []io.Reader) (*anthropic.BetaSkillVersionNewResponse, error) {
 		return r.client.Beta.Skills.Versions.New(ctx, data.SkillID.ValueString(), anthropic.BetaSkillVersionNewParams{
 			Files: files,
 		})

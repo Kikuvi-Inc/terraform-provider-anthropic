@@ -148,11 +148,16 @@ func (r *SkillResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	// The API requires every file to live inside a named top-level directory
-	// (e.g. "myskill/SKILL.md"). We derive that directory name from the common
-	// parent of the provided paths.
-	dirName := filepath.Base(filepath.Dir(filePaths[0]))
+	// (e.g. "myskill/SKILL.md"). We derive that directory name from the
+	// directory containing the first file; for a typical Terraform invocation
+	// where `files = fileset(bundle_path, "**/*")`, that directory is the
+	// bundle root and is shared by every file. The bundle root is also passed
+	// to MultipartUpload so nested subdirectories (e.g. `references/`) are
+	// preserved verbatim in each file's multipart name.
+	bundleRoot := filepath.Dir(filePaths[0])
+	dirName := filepath.Base(bundleRoot)
 
-	skill, err := provretry.MultipartUpload(ctx, filePaths, dirName, func(files []io.Reader) (*anthropic.BetaSkillNewResponse, error) {
+	skill, err := provretry.MultipartUpload(ctx, filePaths, bundleRoot, dirName, func(files []io.Reader) (*anthropic.BetaSkillNewResponse, error) {
 		params := anthropic.BetaSkillNewParams{Files: files}
 		if !data.DisplayTitle.IsNull() && !data.DisplayTitle.IsUnknown() {
 			params.DisplayTitle = anthropic.String(data.DisplayTitle.ValueString())

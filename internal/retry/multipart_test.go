@@ -220,12 +220,17 @@ func TestMultipartUpload_FileNamingUseDirName(t *testing.T) {
 	p := writeFile(t, dir, "SKILL.md", "content")
 
 	var gotFilename string
-	_, _ = MultipartUpload(context.Background(), []string{p}, dir, "myskill", func(files []io.Reader) (string, error) {
-		if named, ok := files[0].(interface{ Filename() string }); ok {
-			gotFilename = named.Filename()
+	_, err := MultipartUpload(context.Background(), []string{p}, dir, "myskill", func(files []io.Reader) (string, error) {
+		named, ok := files[0].(interface{ Filename() string })
+		if !ok {
+			t.Fatalf("reader does not satisfy Filename(): %T", files[0])
 		}
+		gotFilename = named.Filename()
 		return "ok", nil
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	want := "myskill/SKILL.md"
 	if gotFilename != want {
@@ -244,14 +249,19 @@ func TestMultipartUpload_PreservesNestedSubdirectories(t *testing.T) {
 	refPath := writeFile(t, dir, "references/template.md", "template")
 
 	var gotFilenames []string
-	_, _ = MultipartUpload(context.Background(), []string{skillPath, refPath}, dir, "myskill", func(files []io.Reader) (string, error) {
-		for _, f := range files {
-			if named, ok := f.(interface{ Filename() string }); ok {
-				gotFilenames = append(gotFilenames, named.Filename())
+	_, err := MultipartUpload(context.Background(), []string{skillPath, refPath}, dir, "myskill", func(files []io.Reader) (string, error) {
+		for i, f := range files {
+			named, ok := f.(interface{ Filename() string })
+			if !ok {
+				t.Fatalf("reader[%d] does not satisfy Filename(): %T", i, f)
 			}
+			gotFilenames = append(gotFilenames, named.Filename())
 		}
 		return "ok", nil
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	wantFilenames := []string{
 		"myskill/SKILL.md",
@@ -273,9 +283,8 @@ func TestMultipartUpload_PreservesNestedSubdirectories(t *testing.T) {
 func TestMultipartUpload_RejectsFileOutsideBundleRoot(t *testing.T) {
 	outerDir := t.TempDir()
 	innerDir := filepath.Join(outerDir, "bundle")
-	if err := os.Mkdir(innerDir, 0o755); err != nil {
-		t.Fatalf("mkdir innerDir: %v", err)
-	}
+	// writeFile creates parent directories as needed, so innerDir is created
+	// implicitly by the writeFile call below.
 	outsidePath := writeFile(t, outerDir, "outside.md", "x")
 	insidePath := writeFile(t, innerDir, "SKILL.md", "s")
 
@@ -319,13 +328,39 @@ func TestMultipartUpload_MultipleFiles(t *testing.T) {
 	p2 := writeFile(t, dir, "extra.md", "extra content")
 
 	var gotCount int
-	_, _ = MultipartUpload(context.Background(), []string{p1, p2}, dir, "mydir", func(files []io.Reader) (string, error) {
+	_, err := MultipartUpload(context.Background(), []string{p1, p2}, dir, "mydir", func(files []io.Reader) (string, error) {
 		gotCount = len(files)
 		return "ok", nil
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if gotCount != 2 {
 		t.Errorf("fn received %d files, want 2", gotCount)
+	}
+}
+
+// TestMultipartUpload_RejectsBundleRootItselfAsFile guards the `rel == "."`
+// branch of openFiles: a caller that passed bundleRoot itself as a "file"
+// would otherwise produce a nonsensical multipart name like "myskill/." .
+func TestMultipartUpload_RejectsBundleRootItselfAsFile(t *testing.T) {
+	dir := t.TempDir()
+
+	calls := 0
+	_, err := MultipartUpload(context.Background(), []string{dir}, dir, "myskill", func(_ []io.Reader) (string, error) {
+		calls++
+		return "ok", nil
+	})
+
+	if err == nil {
+		t.Fatal("expected error when file path equals bundleRoot")
+	}
+	if !strings.Contains(err.Error(), "not inside bundle root") {
+		t.Errorf("expected 'not inside bundle root' in error, got: %v", err)
+	}
+	if calls != 0 {
+		t.Errorf("fn called %d times, want 0", calls)
 	}
 }
 
@@ -336,14 +371,20 @@ func TestMultipartUpload_FilesReopenedOnRetry(t *testing.T) {
 
 	// Collect all file reads across attempts to confirm fresh opens on each retry.
 	var contents []string
-	MultipartUpload(context.Background(), []string{p}, dir, "mydir", func(files []io.Reader) (string, error) { //nolint:errcheck
-		data, _ := io.ReadAll(files[0])
+	_, err := MultipartUpload(context.Background(), []string{p}, dir, "mydir", func(files []io.Reader) (string, error) {
+		data, readErr := io.ReadAll(files[0])
+		if readErr != nil {
+			return "", readErr
+		}
 		contents = append(contents, string(data))
 		if len(contents) < 2 {
 			return "", apiErr(500)
 		}
 		return "ok", nil
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	for i, c := range contents {
 		if c != "data" {

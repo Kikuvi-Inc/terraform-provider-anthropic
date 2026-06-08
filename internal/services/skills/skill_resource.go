@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -147,15 +146,17 @@ func (r *SkillResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	// The API requires every file to live inside a named top-level directory
-	// (e.g. "myskill/SKILL.md"). We derive that directory name from the
-	// directory containing the first file; for a typical Terraform invocation
-	// where `files = fileset(bundle_path, "**/*")`, that directory is the
-	// bundle root and is shared by every file. The bundle root is also passed
-	// to MultipartUpload so nested subdirectories (e.g. `references/`) are
-	// preserved verbatim in each file's multipart name.
-	bundleRoot := filepath.Dir(filePaths[0])
-	dirName := filepath.Base(bundleRoot)
+	// The API requires every file to live inside a single named top-level
+	// directory (e.g. "myskill/SKILL.md") and that name must match the
+	// `name` field in the bundle's SKILL.md frontmatter. DeriveBundleRoot
+	// returns the longest shared parent of filePaths, which is independent
+	// of input ordering — important because `fileset()` returns lexically
+	// sorted paths and a nested file may sort before SKILL.md.
+	bundleRoot, dirName, err := provretry.DeriveBundleRoot(filePaths)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid skill bundle", err.Error())
+		return
+	}
 
 	skill, err := provretry.MultipartUpload(ctx, filePaths, bundleRoot, dirName, func(files []io.Reader) (*anthropic.BetaSkillNewResponse, error) {
 		params := anthropic.BetaSkillNewParams{Files: files}

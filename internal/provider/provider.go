@@ -166,12 +166,15 @@ func (p *AnthropicProvider) Configure(ctx context.Context, req provider.Configur
 		pd.Client = client
 
 		// Admin API resources are unavailable on AWS; warn if an admin key was
-		// provided rather than failing the whole configuration.
-		if adminApiKey != "" {
+		// set explicitly rather than failing the whole configuration. Gate on
+		// HCL presence (not the env-resolved value) so an ambient
+		// ANTHROPIC_ADMIN_API_KEY doesn't warn on every plan.
+		if isSet(data.AdminApiKey) {
 			resp.Diagnostics.AddWarning(
 				"Admin API key ignored on Claude Platform on AWS",
-				"Admin API resources (anthropic_api_key, anthropic_workspace_member, anthropic_workspace_rate_limits) "+
-					"are not available on Claude Platform on AWS. The configured admin_api_key is ignored.",
+				"Admin API resources (anthropic_api_key(s), anthropic_workspace(s), anthropic_workspace_member(s), "+
+					"anthropic_workspace_rate_limits) are not available on Claude Platform on AWS. "+
+					"The configured admin_api_key is ignored.",
 			)
 		}
 

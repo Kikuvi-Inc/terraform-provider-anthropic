@@ -296,3 +296,46 @@ func TestConfigureAWSWarnsOnAdminKey(t *testing.T) {
 		t.Error("expected AdminClient to remain nil on AWS path")
 	}
 }
+
+// An ambient ANTHROPIC_ADMIN_API_KEY must not produce the "admin key ignored"
+// warning — only an admin_api_key set explicitly in HCL warrants it.
+func TestConfigureAWSNoWarnOnAmbientAdminEnv(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("ANTHROPIC_ADMIN_API_KEY", "sk-ambient-admin")
+
+	resp := configure(t, configValues{
+		aws: &awsConfigValues{
+			apiKey:      "aws-key",
+			region:      "us-west-2",
+			workspaceID: "wrkspc_test",
+		},
+	})
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error: %v", resp.Diagnostics)
+	}
+	if resp.Diagnostics.WarningsCount() != 0 {
+		t.Errorf("ambient admin env var must not warn, got: %v", resp.Diagnostics.Warnings())
+	}
+}
+
+func TestConfigureAWSBaseURL(t *testing.T) {
+	clearEnv(t)
+
+	resp := configure(t, configValues{
+		aws: &awsConfigValues{
+			apiKey:      "aws-key",
+			region:      "us-west-2",
+			workspaceID: "wrkspc_test",
+			baseURL:     "https://gateway.internal.example.com",
+		},
+	})
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error: %v", resp.Diagnostics)
+	}
+	pd := resp.ResourceData.(*providerdata.ProviderData)
+	if pd.Client == nil {
+		t.Error("expected standard Client to be set with aws.base_url override")
+	}
+}

@@ -98,7 +98,7 @@ provider "anthropic" {
 }
 ```
 
-~> **Note**: On Claude Platform on AWS only the standard and beta API surfaces are available — `anthropic_message`, `anthropic_model(s)`, `anthropic_count_tokens`, and the Managed Agents family (`anthropic_agent(s)`, `anthropic_environment(s)`, `anthropic_skill(_version)(s)`). The Admin API resources (`anthropic_api_key(s)`, `anthropic_workspace_member(s)`, `anthropic_workspace_rate_limits`) are not available on AWS; a configured `admin_api_key` is ignored with a warning. The `api_key` and `base_url` arguments are mutually exclusive with the `aws` block.
+~> **Note**: On Claude Platform on AWS only the standard and beta API surfaces are available — `anthropic_message`, `anthropic_model(s)`, `anthropic_count_tokens`, and the Managed Agents family (`anthropic_agent(s)`, `anthropic_environment(s)`, `anthropic_skill(_version)(s)`). The Admin API resources (`anthropic_api_key(s)`, `anthropic_workspace_member(s)`, `anthropic_workspace_rate_limits`) are not available on AWS; a configured `admin_api_key` is ignored with a warning. Setting `api_key` or `base_url` *explicitly* alongside the `aws` block is a configuration error; ambient `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` environment variables are simply ignored on the AWS backend.
 
 ## Cost considerations
 

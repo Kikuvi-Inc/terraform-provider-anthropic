@@ -140,13 +140,17 @@ func (p *AnthropicProvider) Configure(ctx context.Context, req provider.Configur
 
 	if data.AWS != nil {
 		// Claude Platform on AWS backend. The standard client is built against
-		// the AWS gateway; first-party api_key/base_url do not apply.
-		if apiKey != "" || baseURL != "" {
+		// the AWS gateway; first-party api_key/base_url do not apply and are
+		// ignored. Only conflict on values set EXPLICITLY in HCL — an ambient
+		// ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL in the shell or CI runner is not
+		// declared intent and must not break an explicit `aws` block.
+		if isSet(data.ApiKey) || isSet(data.BaseURL) {
 			resp.Diagnostics.AddError(
 				"Conflicting backend configuration",
 				"The `aws` block selects the Claude Platform on AWS backend for standard and beta resources, "+
-					"so `api_key` and `base_url` (or their ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL environment "+
-					"variables) must not be set. Remove them, or remove the `aws` block to use the first-party API.",
+					"so `api_key` and `base_url` must not also be set in the provider configuration. "+
+					"Remove them, or remove the `aws` block to use the first-party API. "+
+					"(Ambient ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL environment variables are ignored on the AWS backend.)",
 			)
 			return
 		}
@@ -245,6 +249,13 @@ func stringValue(v types.String) string {
 		return ""
 	}
 	return v.ValueString()
+}
+
+// isSet reports whether an attribute was set explicitly in the provider
+// configuration (a known, non-null value), as opposed to resolved from an
+// environment variable.
+func isSet(v types.String) bool {
+	return !v.IsNull() && !v.IsUnknown()
 }
 
 func (p *AnthropicProvider) Resources(ctx context.Context) []func() resource.Resource {

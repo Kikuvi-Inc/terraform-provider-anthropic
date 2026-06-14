@@ -249,6 +249,30 @@ func TestConfigureAWSConflictsWithFirstParty(t *testing.T) {
 	}
 }
 
+// An ambient ANTHROPIC_API_KEY in the shell/CI must not break an explicit `aws`
+// block — only api_key set explicitly in HCL conflicts.
+func TestConfigureAWSIgnoresAmbientFirstPartyEnv(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ambient")
+	t.Setenv("ANTHROPIC_BASE_URL", "https://ambient.example.com")
+
+	resp := configure(t, configValues{
+		aws: &awsConfigValues{
+			apiKey:      "aws-key",
+			region:      "us-west-2",
+			workspaceID: "wrkspc_test",
+		},
+	})
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("ambient first-party env vars must not conflict with an explicit aws block: %v", resp.Diagnostics)
+	}
+	pd := resp.ResourceData.(*providerdata.ProviderData)
+	if pd.Client == nil {
+		t.Error("expected standard Client to be set on AWS path")
+	}
+}
+
 func TestConfigureAWSWarnsOnAdminKey(t *testing.T) {
 	clearEnv(t)
 

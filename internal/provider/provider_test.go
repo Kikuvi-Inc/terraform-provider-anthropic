@@ -113,6 +113,7 @@ func clearEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
 		"ANTHROPIC_API_KEY",
+		"ANTHROPIC_AUTH_TOKEN",
 		"ANTHROPIC_ADMIN_API_KEY",
 		"ANTHROPIC_BASE_URL",
 		"ANTHROPIC_AWS_API_KEY",

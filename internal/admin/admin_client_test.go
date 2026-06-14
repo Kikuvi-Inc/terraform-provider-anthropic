@@ -42,6 +42,33 @@ func TestIsNotFound(t *testing.T) {
 	}
 }
 
+// --- constructors ---
+
+func TestNewClient_defaultBaseURL(t *testing.T) {
+	c := NewClient("key")
+	if c.BaseURL != adminAPIBaseURL {
+		t.Errorf("BaseURL = %q, want default %q", c.BaseURL, adminAPIBaseURL)
+	}
+	if c.ApiKey != "key" {
+		t.Errorf("ApiKey = %q, want %q", c.ApiKey, "key")
+	}
+}
+
+func TestNewClientWithBaseURL(t *testing.T) {
+	t.Run("override", func(t *testing.T) {
+		c := NewClientWithBaseURL("key", "https://proxy.example.com")
+		if c.BaseURL != "https://proxy.example.com" {
+			t.Errorf("BaseURL = %q, want override", c.BaseURL)
+		}
+	})
+	t.Run("empty falls back to default", func(t *testing.T) {
+		c := NewClientWithBaseURL("key", "")
+		if c.BaseURL != adminAPIBaseURL {
+			t.Errorf("BaseURL = %q, want default %q", c.BaseURL, adminAPIBaseURL)
+		}
+	})
+}
+
 // --- doRequest ---
 
 func newTestAdminClient(t *testing.T, srv *httptest.Server) *Client {

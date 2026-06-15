@@ -58,6 +58,48 @@ The `admin_api_key` is optional — you only need it when using workspace-relate
 ~> **Warning**: Never hardcode API keys in your Terraform configuration files.
 Use environment variables or a secrets manager instead.
 
+## Base URL override (`base_url` / `ANTHROPIC_BASE_URL`)
+
+Override the base URL for the first-party Anthropic API — useful for a corporate proxy, an LLM gateway, or a local mock during testing. Applies to both the standard and admin clients. Ignored when the `aws` block is set.
+
+```hcl
+provider "anthropic" {
+  base_url = "https://anthropic-proxy.internal.example.com"
+}
+```
+
+## Claude Platform on AWS (`aws` block)
+
+[Claude Platform on AWS](https://platform.claude.com/docs/en/build-with-claude/claude-platform-on-aws) is Anthropic-operated access to the Claude Developer Platform through AWS, with SigV4 / AWS-IAM authentication, AWS Marketplace billing, and a separate Anthropic organization bound to your AWS account. Setting the `aws` block routes all standard and beta resources through the AWS gateway instead of the first-party endpoint.
+
+The `region` and `workspace_id` fields are required; both can also be supplied via environment variables (`AWS_REGION`, `ANTHROPIC_AWS_WORKSPACE_ID`).
+
+**API-key authentication** (generate the key in the AWS Console under Claude Platform on AWS → API keys):
+
+```hcl
+provider "anthropic" {
+  aws = {
+    api_key      = "..."           # or ANTHROPIC_AWS_API_KEY
+    region       = "us-west-2"     # or AWS_REGION
+    workspace_id = "wrkspc_..."    # or ANTHROPIC_AWS_WORKSPACE_ID
+  }
+}
+```
+
+**SigV4 authentication** — omit `aws.api_key` and the provider resolves AWS credentials via the standard credential chain (environment variables, shared credentials file, IAM role). Optionally pin a named profile:
+
+```hcl
+provider "anthropic" {
+  aws = {
+    region       = "us-west-2"
+    workspace_id = "wrkspc_..."
+    profile      = "my-aws-profile"  # optional
+  }
+}
+```
+
+~> **Note**: On Claude Platform on AWS only the standard and beta API surfaces are available — `anthropic_message`, `anthropic_model(s)`, `anthropic_count_tokens`, and the Managed Agents family (`anthropic_agent(s)`, `anthropic_environment(s)`, `anthropic_skill(_version)(s)`). The Admin API resources (`anthropic_api_key(s)`, `anthropic_workspace(s)`, `anthropic_workspace_member(s)`, `anthropic_workspace_rate_limits`) are not available on AWS; a configured `admin_api_key` is ignored with a warning. Setting `api_key` or `base_url` *explicitly* alongside the `aws` block is a configuration error; ambient `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` environment variables are simply ignored on the AWS backend.
+
 ## Cost considerations
 
 ~> **Warning**: Some resources call billable Anthropic APIs at `terraform apply` time and can generate unbounded variable cost. `anthropic_message` consumes tokens on every apply, and Managed Agents / Skills (created via `anthropic_agent`, `anthropic_environment`, `anthropic_skill`, `anthropic_skill_version`) are free to manage but billable when invoked at runtime. Combining these with `count`/`for_each` over a large input set, or omitting `max_tokens`, can produce a single apply that costs significantly more than expected.

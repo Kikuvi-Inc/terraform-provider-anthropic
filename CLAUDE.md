@@ -144,6 +144,17 @@ The provider has two optional API keys — at least one must be configured:
 | Standard | `api_key` | `ANTHROPIC_API_KEY` | `pd.Client` | All standard resources and data sources |
 | Admin | `admin_api_key` | `ANTHROPIC_ADMIN_API_KEY` | `pd.AdminClient` | Organization endpoints (`/v1/organizations/*`, e.g. workspaces) |
 
+### Backends: first-party, base_url override, Claude Platform on AWS
+
+`provider.go` `Configure` selects one backend for the standard client:
+
+- **First-party** (default): `anthropic.NewClient(option.WithAPIKey(apiKey), [option.WithBaseURL(baseURL)])`. The optional `base_url` provider arg (`ANTHROPIC_BASE_URL`) overrides the endpoint for **both** the standard client and the admin client (`admin.NewClientWithBaseURL`) — use it for a proxy/gateway/test mock.
+- **Claude Platform on AWS**: selected by the presence of the `aws { api_key, region, workspace_id, profile, base_url }` nested block (`data.AWS != nil`). Built via the SDK's `aws.NewClient` (subpackage `github.com/anthropics/anthropic-sdk-go/aws`), which handles SigV4 / API-key auth and the `anthropic-workspace-id` header. The resulting `*aws.Client` shares service types with `*anthropic.Client`, so `newAWSClient` copies its `Options`/`Completions`/`Messages`/`Models`/`Beta` fields into a `*anthropic.Client` — keeping `pd.Client` typed as `*anthropic.Client` so **all resources work unchanged**. Do **not** call `anthropic.NewClient` on the AWS path (it would leak `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL` via `DefaultClientOptions()`); copy the fields directly.
+
+Backend-selection rules in `Configure`:
+- The `aws` block is mutually exclusive with the first-party `api_key`/`base_url`. Conflict and "admin key ignored" checks gate on **explicit HCL presence** (`isSet(v) == !v.IsNull() && !v.IsUnknown()`), **not** the env-resolved value — an ambient `ANTHROPIC_*` env var must never break or warn on an explicit `aws` block.
+- **Admin API resources are unavailable on Claude Platform on AWS** (the gateway exposes only the workspace endpoints, not API keys / members / rate-limit reports), so `pd.AdminClient` stays nil on the AWS path and `anthropic_api_key(s)`, `anthropic_workspace_member(s)`, `anthropic_workspace_rate_limits` (and `anthropic_workspace(s)`, pending SigV4 in `internal/admin`) remain first-party-only.
+
 ### Configure method pattern
 
 Every resource and data source `Configure` method must:
@@ -171,7 +182,7 @@ r.client = pd.Client
 
 ### Shared helpers
 
-- `internal/admin/` — HTTP client for Admin API; import as `"github.com/ippontech/terraform-provider-anthropic/internal/admin"`
+- `internal/admin/` — HTTP client for Admin API; import as `"github.com/ippontech/terraform-provider-anthropic/internal/admin"`. `NewClient(apiKey)` uses the default base URL; `NewClientWithBaseURL(apiKey, baseURL)` overrides it (empty `baseURL` falls back to the default), used to thread the provider `base_url` arg into the admin client.
 - `internal/errors/` (import alias `providerrors`) — nil-client guards for `Configure` methods
 - `internal/providerdata/` (import alias `providerdata`) — `ProviderData` struct
 - `internal/retry/` (import alias `provretry`) — multipart file upload with automatic 5xx retry; use `provretry.MultipartUpload` for any resource that uploads files to the API (the Anthropic SDK cannot retry streaming multipart bodies on its own)

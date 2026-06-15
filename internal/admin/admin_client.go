@@ -48,9 +48,19 @@ func IsNotFound(err error) bool {
 }
 
 func NewClient(apiKey string) *Client {
+	return NewClientWithBaseURL(apiKey, "")
+}
+
+// NewClientWithBaseURL is like NewClient but overrides the API base URL.
+// An empty baseURL falls back to the default first-party endpoint, so callers
+// can pass a resolved override unconditionally.
+func NewClientWithBaseURL(apiKey, baseURL string) *Client {
+	if baseURL == "" {
+		baseURL = adminAPIBaseURL
+	}
 	return &Client{
 		ApiKey:     apiKey,
-		BaseURL:    adminAPIBaseURL,
+		BaseURL:    baseURL,
 		HTTPClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
